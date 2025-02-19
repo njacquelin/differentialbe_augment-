@@ -18,10 +18,10 @@ if __name__ == "__main__":
 
     batch_size = 1024
     epochs_nb = 100
-    warmup_epochs_nb = 0
+    warmup_epochs_nb = 10
     lr = 1e-3
     model_path = "models/best_model.pt"
-    load_model = True
+    load_model = False
 
     hardware = "mono-gpu"
     # hardware = "cpu"
@@ -46,18 +46,16 @@ if __name__ == "__main__":
     train_sampler, eval_sampler, train_loader, eval_loader = get_data_stuff(hardware, train_dataset, eval_dataset,
                                                                             batch_size, nb_workers, world_size, global_rank)
     criterion = MSELoss()
-    optimizer = SGD(model.parameters(), lr=lr)
+    optimizer = SGD(model.parameters(),
+                    lr=lr)
 
-    # # CREATE SCHEDULERS
-    # last_epoch = -1 
-    # last_step = -1 
-    # warm_up_scheduler_repr = torch.optim.lr_scheduler.LinearLR(
-    #     optimizer,
-    #     start_factor=1e-8, end_factor=1,
-    #     total_iters = warmup_epochs_nb * len(train_loader),
-    #     last_epoch = last_step
-    # )
-
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer,
+        start_factor=1e-8,
+        end_factor=1,
+        total_iters = warmup_epochs_nb * len(train_loader),
+        last_epoch = -1optimizer_repr
+    )
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
         T_max = (epochs_nb - warmup_epochs_nb) * len(train_loader),
@@ -88,9 +86,13 @@ if __name__ == "__main__":
             optimizer.step()
             losses.append(loss.float())
 
-            cosine_scheduler.step() # inside the batch loop because the "scheduler size" = epoch_nb * len(train_dataloader)
+             # inside the batch loop because the "scheduler size" = epoch_nb * len(train_dataloader)
+            if epoch <= warmup_epochs_nb:
+                warmup_scheduler.step()
+            else:
+                cosine_scheduler.step()
             
-            if i%20==0:
+            if i%10==0:
                 print(f"Epoch {epoch} - batch {i+1}/{len(train_loader)}")
             
         avg_loss = sum(losses) / len(losses)
