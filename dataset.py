@@ -85,11 +85,9 @@ class AugDatasetWrapper(torch.utils.data.Dataset):
         img, _ = self.dataset[idx] # 2nd return variable (label) not used here
 
         img_0 = self.no_transform(img)
-        # img_t, param = self.transform(img)
-        # params = (params - self.p_mean) / self.p_std
-        # params = torch.squeeze(params)
-        img_t = img_0[:]
-        params = torch.zeros((15))
+        img_t, params = self.transform(img)
+        params = (params - self.p_mean) / self.p_std
+        params = torch.squeeze(params)
 
         return img_0, img_t, params
     

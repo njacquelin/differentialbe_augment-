@@ -9,7 +9,7 @@ class Image_Augmenter(nn.Module):
     def __init__(self, cifar=False):
         super().__init__()
         self.n_head = 6
-        self.n_layers = 1
+        self.n_layers = 6
         self.h_dim = 1024
         self.d_model = 384 # must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
@@ -47,7 +47,13 @@ class Image_Augmenter(nn.Module):
         self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=6)
 
         self.deconv_output = nn.Sequential(
-            nn.ConvTranspose2d(self.d_model, 3, kernel_size=kernel, stride=kernel, padding=0),
+            nn.ConvTranspose2d(self.d_model, 64, kernel_size=kernel, stride=kernel, padding=0),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(3, affine=False),
         )
         
@@ -77,7 +83,12 @@ class Image_Augmenter(nn.Module):
 
         return x_hat
 
+    def save(self, path):
+        torch.save(model.state_dict(), path)
 
+    def load_weights(self, path):
+        model.load_state_dict(torch.load(path, weights_only=True))
+    
 
 
 class PositionalEncoding(nn.Module):

@@ -20,6 +20,8 @@ if __name__ == "__main__":
     epochs_nb = 100
     # warmup_epochs_nb = 10
     lr = 1e-3
+    model_path = "models/best_model.pt"
+    load_model = False
 
     hardware = "mono-gpu"
     # hardware = "cpu"
@@ -33,6 +35,7 @@ if __name__ == "__main__":
     model = Image_Augmenter(cifar=True)
     model = adapt_to_parallel_computing(hardware, model, local_rank)
     model.to(device)
+    if load_model: model.load(model_path)
     
     train_dataset = get_dataset(device, "cifar", 'train')
     eval_dataset = get_dataset(device, "cifar", 'eval')
@@ -58,6 +61,8 @@ if __name__ == "__main__":
     #     T_max = (epochs_nb - warmup_epochs_nb) * len(train_loader),
     #     last_epoch = last_step, eta_min=1e-8
     # )
+    
+    best_loss_value = 1000
 
     for epoch in range(1, epochs_nb+1):
         ### TRAIN ###
@@ -79,7 +84,8 @@ if __name__ == "__main__":
             optimizer.step()
             losses.append(loss.float())
 
-            print(f"Epoch {epoch} - batch {i+1}/{len(train_loader)}")
+            if i%20==0:
+                print(f"Epoch {epoch} - batch {i+1}/{len(train_loader)}")
             
             # ### LOCAL TESTS BLOC => TO REMOVE ###
             # img_0 = reverse_transform(img_0[0])
@@ -93,7 +99,7 @@ if __name__ == "__main__":
             # #####################################
             
         avg_loss = sum(losses) / len(losses)
-        writer.add_scalar('train_loss_z', avg_loss, epoch)
+        writer.add_scalar('train_MSE', avg_loss, epoch)
         print(f"Epoch {epoch} - train loss: {avg_loss:2.5f} - duration: {time() - start:5.5f}s")
 
         img_0 = reverse_transform(img_0[0])
@@ -123,10 +129,11 @@ if __name__ == "__main__":
                 loss = criterion(img_out, img_t)
                 losses.append(loss.float())
 
-                print(f"Epoch {epoch} - batch {i+1}/{len(eval_loader)}")
+                if i%20==0:
+                    print(f"Epoch {epoch} - batch {i+1}/{len(eval_loader)}")
 
         avg_loss = sum(losses) / len(losses)
-        writer.add_scalar('train_loss_z', avg_loss, epoch)
+        writer.add_scalar('eval_MSE', avg_loss, epoch)
         print(f"Epoch {epoch} - test loss : {avg_loss:2.5f} - duration: {time() - start:5.5f}s")
 
         img_0 = reverse_transform(img_0[0])
@@ -139,4 +146,8 @@ if __name__ == "__main__":
         img_save = torch.stack((img_0, img_t, img_out), dim=0)
         save_image(img_save,
                    f'img/test images epoch {epoch}.jpg')
+
+        if avg_loss < best_loss_value:
+            model.save(model_path)
+            best_loss_value = avg_loss
 
