@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
 
+from math import log
+
 
 class Image_Augmenter(nn.Module):
     def __init__(self, cifar=False):
@@ -11,6 +13,8 @@ class Image_Augmenter(nn.Module):
         self.h_dim = 1024
         self.d_model = 384 # must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
+
+        self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len= 196)
 
         input_size = 32 if cifar else 224
         kernel = 4 if cifar else 16
@@ -62,6 +66,7 @@ class Image_Augmenter(nn.Module):
         feature_map = self.conv_input(x) # (B, D, H, W)
         sequence = feature_map.view(-1, self.d_model, self.seq_size) # (B, D, S)
         sequence = torch.permute(sequence, (2, 0, 1)) # (S, B, D)
+        sequence = self.positional_encoding(sequence)
 
         img_embedding = self.transformer_decoder(sequence, transformation_embedding) # (S, B, D)
 
@@ -71,3 +76,26 @@ class Image_Augmenter(nn.Module):
         x_hat = self.deconv_output(out_feature_map)
 
         return x_hat
+
+
+
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 196):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (- log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+            x : (S, B, D)
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)

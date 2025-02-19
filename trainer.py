@@ -1,6 +1,7 @@
 from dataset import *
 from model import Image_Augmenter
 from parallel_computing_utils import *
+from img_utils import get_reverse_transform
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn import MSELoss
@@ -31,6 +32,7 @@ if __name__ == "__main__":
     
     train_dataset = get_dataset(device, "cifar", 'train')
     eval_dataset = get_dataset(device, "cifar", 'eval')
+    reverse_transform = get_reverse_transform(train_dataset.no_transform)
 
     train_sampler, eval_sampler, train_loader, eval_loader = get_data_stuff(hardware, train_dataset, eval_dataset,
                                                                             batch_size, nb_workers, world_size, global_rank)
@@ -66,17 +68,32 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             losses.append(loss.float())
+            
+            # ### LOCAL TESTS BLOC => TO REMOVE ###
+            # img_0 = reverse_transform(img_0[0])
+            # img_t = reverse_transform(img_t[0])
+            # img_out = reverse_transform(img_out[0])
+            # writer.add_image(f"train source epoch {epoch}", img_0)
+            # writer.add_image(f"train target epoch {epoch}", img_t)
+            # writer.add_image(f"train output epoch {epoch}", img_out)
+            # avg_loss = sum(losses) / len(losses)
+            # writer.add_scalar('train_loss_z', avg_loss, epoch)
+            # #####################################
 
         avg_loss = sum(losses) / len(losses)
         writer.add_scalar('train_loss_z', avg_loss, epoch)
 
+        img_0 = reverse_transform(img_0[0])
+        img_t = reverse_transform(img_t[0])
+        img_out = reverse_transform(img_out[0])
+        writer.add_image(f"train source epoch {epoch}", img_0)
         writer.add_image(f"train target epoch {epoch}", img_t[0])
         writer.add_image(f"train output epoch {epoch}", img_out[0])
 
         ### TEST ###
         with torch.no_grad():
             losses = []
-            for i, batch in enumerate(train_loader):
+            for i, batch in enumerate(eval_loader):
                 img_0, img_t, params = batch
                 img_out = model(img_0, params)
 
@@ -86,8 +103,12 @@ if __name__ == "__main__":
             avg_loss = sum(losses) / len(losses)
         writer.add_scalar('train_loss_z', avg_loss, epoch)
 
-        writer.add_image(f"test target epoch {epoch}", img_t[0])
-        writer.add_image(f"test output epoch {epoch}", img_out[0])
+        img_0 = reverse_transform(img_0[0])
+        img_t = reverse_transform(img_t[0])
+        img_out = reverse_transform(img_out[0])
+        writer.add_image(f"train source epoch {epoch}", img_0)
+        writer.add_image(f"train target epoch {epoch}", img_t[0])
+        writer.add_image(f"train output epoch {epoch}", img_out[0])
 
 
 
