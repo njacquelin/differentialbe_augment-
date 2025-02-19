@@ -16,10 +16,10 @@ if __name__ == "__main__":
 
     writer = SummaryWriter()
 
-    batch_size = 1024
+    batch_size = 512
     epochs_nb = 100
     # warmup_epochs_nb = 10
-    lr = 1e-2
+    lr = 1e-3
 
     hardware = "mono-gpu"
     # hardware = "cpu"

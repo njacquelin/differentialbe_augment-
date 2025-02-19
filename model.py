@@ -9,17 +9,17 @@ class Image_Augmenter(nn.Module):
     def __init__(self, cifar=False):
         super().__init__()
         self.n_head = 6
-        self.n_layers = 6
+        self.n_layers = 1
         self.h_dim = 1024
         self.d_model = 384 # must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
-
-        self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len= 196)
 
         input_size = 32 if cifar else 224
         kernel = 4 if cifar else 16
         self.map_size = input_size // kernel
         self.seq_size = self.map_size ** 2
+        
+        self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len=self.seq_size)
 
         self.transform_encoder = nn.Sequential(
             nn.Linear(self.d_input_augment_vector, self.h_dim),
@@ -66,12 +66,12 @@ class Image_Augmenter(nn.Module):
         feature_map = self.conv_input(x) # (B, D, H, W)
         sequence = feature_map.view(-1, self.d_model, self.seq_size) # (B, D, S)
         sequence = torch.permute(sequence, (2, 0, 1)) # (S, B, D)
+        
         sequence = self.positional_encoding(sequence)
+        seq_embedding = self.transformer_decoder(sequence, transformation_embedding) # (S, B, D)
 
-        img_embedding = self.transformer_decoder(sequence, transformation_embedding) # (S, B, D)
-
-        out_feature_map = torch.permute(img_embedding, (1, 2, 0)) # (B, D, S)
-        out_feature_map = img_embedding.view(-1, self.d_model, self.map_size, self.map_size) # (B, 3, H, W)
+        out_feature_map = torch.permute(seq_embedding, (1, 2, 0)) # (B, D, S)
+        out_feature_map = out_feature_map.view(-1, self.d_model, self.map_size, self.map_size) # (B, D, H, W)
 
         x_hat = self.deconv_output(out_feature_map)
 
