@@ -7,6 +7,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn import MSELoss
 from torch.optim import SGD
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import save_image
 
 
 if __name__ == "__main__":
@@ -79,7 +80,7 @@ if __name__ == "__main__":
             # avg_loss = sum(losses) / len(losses)
             # writer.add_scalar('train_loss_z', avg_loss, epoch)
             # #####################################
-
+            
         avg_loss = sum(losses) / len(losses)
         writer.add_scalar('train_loss_z', avg_loss, epoch)
 
@@ -87,8 +88,12 @@ if __name__ == "__main__":
         img_t = reverse_transform(img_t[0])
         img_out = reverse_transform(img_out[0])
         writer.add_image(f"train source epoch {epoch}", img_0)
-        writer.add_image(f"train target epoch {epoch}", img_t[0])
-        writer.add_image(f"train output epoch {epoch}", img_out[0])
+        writer.add_image(f"train target epoch {epoch}", img_t)
+        writer.add_image(f"train output epoch {epoch}", img_out)
+        img_save = torch.stack((img_0, img_t, img_out), dim=0)
+        save_image(img_save,
+                   f'img/train images epoch {epoch+1}.jpg')
+
 
         ### TEST ###
         with torch.no_grad():
@@ -109,6 +114,9 @@ if __name__ == "__main__":
         writer.add_image(f"train source epoch {epoch}", img_0)
         writer.add_image(f"train target epoch {epoch}", img_t[0])
         writer.add_image(f"train output epoch {epoch}", img_out[0])
+        img_save = torch.stack((img_0, img_t, img_out), dim=0)
+        save_image(img_save,
+                   f'img/test images epoch {epoch+1}.jpg')
 
 
 
