@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     batch_size = 1024
     epochs_nb = 100
-    # warmup_epochs_nb = 10
+    warmup_epochs_nb = 0
     lr = 1e-3
     model_path = "models/best_model.pt"
     load_model = True
@@ -58,11 +58,12 @@ if __name__ == "__main__":
     #     last_epoch = last_step
     # )
 
-    # cosine_scheduler_repr = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #     optimizer,
-    #     T_max = (epochs_nb - warmup_epochs_nb) * len(train_loader),
-    #     last_epoch = last_step, eta_min=1e-8
-    # )
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max = (epochs_nb - warmup_epochs_nb) * len(train_loader),
+        last_epoch = -1,
+        eta_min = 1e-8
+    )
     
     best_loss_value = 1000
 
@@ -87,19 +88,10 @@ if __name__ == "__main__":
             optimizer.step()
             losses.append(loss.float())
 
+            cosine_scheduler.step() # inside the batch loop because the "scheduler size" = epoch_nb * len(train_dataloader)
+            
             if i%20==0:
                 print(f"Epoch {epoch} - batch {i+1}/{len(train_loader)}")
-            
-            # ### LOCAL TESTS BLOC => TO REMOVE ###
-            # img_0 = reverse_transform(img_0[0])
-            # img_t = reverse_transform(img_t[0])
-            # img_out = reverse_transform(img_out[0])
-            # writer.add_image(f"train source epoch {epoch}", img_0)
-            # writer.add_image(f"train target epoch {epoch}", img_t)
-            # writer.add_image(f"train output epoch {epoch}", img_out)
-            # avg_loss = sum(losses) / len(losses)
-            # writer.add_scalar('train_loss_z', avg_loss, epoch)
-            # #####################################
             
         avg_loss = sum(losses) / len(losses)
         writer.add_scalar('train_MSE', avg_loss, epoch)
