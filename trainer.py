@@ -16,18 +16,19 @@ if __name__ == "__main__":
 
     writer = SummaryWriter()
 
-    batch_size = 1024
-    epochs_nb = 100
-    warmup_epochs_nb = 10
+    batch_size = 512
+    epochs_nb = 1000
     lr = 1e-3
     model_path = "models/best_model.pt"
+    # load_model = True
+    # warmup_epochs_nb = 0
     load_model = False
+    warmup_epochs_nb = 10
 
     hardware = "mono-gpu"
     # hardware = "cpu"
     computer = "pagoda"
     nb_workers = 20
-    # scaler = torch.cuda.amp()
 
     global_rank, local_rank, world_size, is_master, device = get_infos(hardware, computer)
     if hardware != 'cpu': torch.backends.cudnn.benchmark = True
@@ -54,7 +55,7 @@ if __name__ == "__main__":
         start_factor=1e-8,
         end_factor=1,
         total_iters = warmup_epochs_nb * len(train_loader),
-        last_epoch = -1optimizer_repr
+        last_epoch = -1
     )
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,

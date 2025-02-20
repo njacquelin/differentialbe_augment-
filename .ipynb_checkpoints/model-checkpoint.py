@@ -9,7 +9,7 @@ class Image_Augmenter(nn.Module):
     def __init__(self, cifar=False):
         super().__init__()
         self.n_head = 6
-        self.n_layers = 6
+        self.n_layers = 8
         self.h_dim = 1024
         self.d_model = 384 # must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
@@ -22,21 +22,27 @@ class Image_Augmenter(nn.Module):
         self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len=self.seq_size)
 
         self.transform_encoder = nn.Sequential(
-            nn.Linear(self.d_input_augment_vector, self.h_dim),
+            nn.Linear(self.d_input_augment_vector, self.h_dim, bias=False),
             nn.BatchNorm1d(self.h_dim),
             nn.ReLU(),
             ##### ONE HIDDEN LAYER BLOC #####
-            nn.Linear(self.h_dim, self.h_dim),
+            nn.Linear(self.h_dim, self.h_dim, bias=False),
             nn.BatchNorm1d(self.h_dim),
             nn.ReLU(),
             ########### BLOC END ############
-            nn.Linear(self.h_dim, self.d_model),
+            nn.Linear(self.h_dim, self.d_model, bias=False),
             nn.BatchNorm1d(self.d_model),
             nn.ReLU(),
         )
 
         self.conv_input = nn.Sequential(
-            nn.Conv2d(3, self.d_model, kernel_size=kernel, stride=kernel, padding=0),
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, self.d_model, kernel_size=kernel, stride=kernel, padding=0, bias=False),
             nn.BatchNorm2d(self.d_model),
             nn.ReLU(),
         )
@@ -47,13 +53,13 @@ class Image_Augmenter(nn.Module):
         self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=6)
 
         self.deconv_output = nn.Sequential(
-            nn.ConvTranspose2d(self.d_model, 64, kernel_size=kernel, stride=kernel, padding=0),
+            nn.ConvTranspose2d(self.d_model, 64, kernel_size=kernel, stride=kernel, padding=0, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(3, affine=False),
         )
         
@@ -67,14 +73,21 @@ class Image_Augmenter(nn.Module):
         (17) elt params vector => (d_model) embedding vector
         (224 x 224) image => (14 x 14) feature map => (196) tokens sequence => (14 x 14) feature map => (224 x 224) image
         """
+        ### Prepare Keys ###
         transformation_embedding = self.transform_encoder(params).unsqueeze(0)
         
         feature_map = self.conv_input(x) # (B, D, H, W)
-        sequence = feature_map.view(-1, self.d_model, self.seq_size) # (B, D, S)
-        sequence = torch.permute(sequence, (2, 0, 1)) # (S, B, D)
+        img_sequence = feature_map.view(-1, self.d_model, self.seq_size) # (B, D, S)
+        img_sequence = torch.permute(img_sequence, (2, 0, 1)) # (S, B, D)
+        img_sequence = self.positional_encoding(img_sequence) # (S, B, D)
         
-        sequence = self.positional_encoding(sequence)
-        seq_embedding = self.transformer_decoder(sequence, transformation_embedding) # (S, B, D)
+        transfo_keys = torch.cat((transformation_embedding, img_sequence), dim=0) # (S+1, B, D)
+
+        ### Prepare Queries ###
+        spatial_queries = self.positional_encoding(torch.zeros_like(img_sequence)) # (S, B, D)
+
+        ### Transformer inference ###
+        seq_embedding = self.transformer_decoder(spatial_queries, transfo_keys) # Q:(S, B, D) @ K:(S+1, B, D) => (S, B, D)
 
         out_feature_map = torch.permute(seq_embedding, (1, 2, 0)) # (B, D, S)
         out_feature_map = out_feature_map.view(-1, self.d_model, self.map_size, self.map_size) # (B, D, H, W)
