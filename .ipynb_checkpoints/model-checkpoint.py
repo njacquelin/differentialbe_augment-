@@ -1,4 +1,5 @@
 import torch
+import torchvision
 from torch import nn
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
 
@@ -9,7 +10,7 @@ class Image_Augmenter(nn.Module):
     def __init__(self, cifar=False):
         super().__init__()
         self.n_head = 6
-        self.n_layers = 8
+        self.n_layers = 12
         self.h_dim = 1024
         self.d_model = 384 # must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
@@ -47,6 +48,18 @@ class Image_Augmenter(nn.Module):
             nn.ReLU(),
         )
 
+        # ######## RESNET ########
+        # self.conv_input = torchvision.models.resnet18()
+        # end_conv = torch.nn.Conv2d(self.conv_input.fc.in_features, self.d_model, kernel_size=1, bias=False)
+        # self.conv_input.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        # self.conv_input.maxpool = torch.nn.Identity()
+        # self.conv_input.layer4[0].conv1.stride = (1, 1)
+        # self.conv_input = torch.nn.Sequential(*(list(self.conv_input.children())[:-2]))#, end_conv)
+        # #########################
+        # print(self.conv_input)
+        # # self.map_size = 8
+        # # self.seq_size = self.map_size ** 2
+
         decoder_layer = TransformerDecoderLayer(d_model = self.d_model,
                                                   nhead = self.n_head,
                                                   dim_feedforward = self.h_dim)
@@ -63,7 +76,6 @@ class Image_Augmenter(nn.Module):
             nn.BatchNorm2d(3, affine=False),
         )
         
-
     
     def forward(self, x, params):
         """
@@ -75,7 +87,7 @@ class Image_Augmenter(nn.Module):
         """
         ### Prepare Keys ###
         transformation_embedding = self.transform_encoder(params).unsqueeze(0)
-        
+
         feature_map = self.conv_input(x) # (B, D, H, W)
         img_sequence = feature_map.view(-1, self.d_model, self.seq_size) # (B, D, S)
         img_sequence = torch.permute(img_sequence, (2, 0, 1)) # (S, B, D)

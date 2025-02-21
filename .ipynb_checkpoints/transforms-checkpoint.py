@@ -1,18 +1,22 @@
 import random
 import torch
 import torchvision
+from torchvision.transforms import v2
 import torchvision.transforms.v2.functional as F
 
 
 class ParamRandomResizedCrop(torchvision.transforms.RandomResizedCrop):
-    def __init__(self, pflip=0.5, *args, **kwargs):
+    def __init__(self, tau=1., pflip=0.5, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pflip = pflip
         self.nb_params = 5
+        self.tau = tau
 
     def get_params(self, img):
-        i, j, h, w = super().get_params(img, self.scale, self.ratio)
-        flip = int(random.random() < self.pflip)
+        scale = [1. - (1 - self.scale[0]) * self.tau,
+                 1.]
+        i, j, h, w = super().get_params(img, scale, self.ratio)
+        flip = int(random.random() < self.pflip * self.tau)
 
         return [i, j, h, w, flip]
 
@@ -35,23 +39,33 @@ class ParamRandomResizedCrop(torchvision.transforms.RandomResizedCrop):
 
 
 class ParamColorJitter(torchvision.transforms.ColorJitter):
-    def __init__(self, pjitter=0.8, pgray=0.2, *args, **kwargs):
+    def __init__(self, tau=1., pjitter=0.8, pgray=0.2, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pjitter = pjitter
         self.pgray = pgray
         self.nb_params = 10
+        self.tau = tau
 
     def get_params(self, img):
-        jitter = int(random.random() < self.pjitter)
+        jitter = int(random.random() < self.pjitter * self.tau)
+        
+        brightness = (1 - (1 - self.brightness[0]) * self.tau,
+                      1 + (1 - self.brightness[0]) * self.tau)
+        contrast = (1 - (1 - self.contrast[0]) * self.tau,
+                    1 + (1 - self.contrast[0]) * self.tau)
+        saturation = (1 - (1 - self.saturation[0]) * self.tau,
+                      1 + (1 - self.saturation[0]) * self.tau)
+        hue = (self.hue[0] * self.tau,
+               self.hue[1] * self.tau)
 
         if jitter:
             fn_idx, brightness_factor, contrast_factor, saturation_factor, hue_factor = \
-                super().get_params(self.brightness, self.contrast, self.saturation, self.hue)
+                super().get_params(brightness, contrast, saturation, hue)
         else:
             fn_idx, brightness_factor, contrast_factor, saturation_factor, hue_factor = \
                 [[0, 1, 2, 3], 1., 1., 1., 0.]
         
-        gray = int(random.random() < self.pgray)
+        gray = int(random.random() < self.pgray * self.tau)
 
         return [jitter, fn_idx, brightness_factor, contrast_factor, saturation_factor, hue_factor, gray]
 
@@ -83,16 +97,18 @@ class ParamColorJitter(torchvision.transforms.ColorJitter):
 
 
 class ParamGaussianBlur(torchvision.transforms.GaussianBlur):
-    def __init__(self, pblur=0.5, *args, **kwargs):
+    def __init__(self, tau=1., pblur=0.5, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pblur = pblur
         self.nb_params = 2
+        self.tau = tau
     
     def get_params(self, img):
-        blur = int(random.random() < self.pblur)
-
+        blur = int(random.random() < self.pblur * self.tau)
+        sigma = (self.sigma[0] * self.tau,
+                 self.sigma[1] * self.tau)
         if blur:
-            sigma = super().get_params(self.sigma[0], self.sigma[1])
+            sigma = super().get_params(sigma[0], sigma[1])
         else:
             sigma = 0.
 
@@ -141,3 +157,7 @@ class ParamCompose(torch.nn.Module):
     def forward(self, img):
         params = self.get_params(img)
         return self.apply(img, params)
+    
+    def update_tau(self, tau):
+        for transform in self.param_transforms:
+            transform.tau = tau

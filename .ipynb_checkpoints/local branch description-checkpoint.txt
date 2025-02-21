@@ -1,9 +1,0 @@
-no transform:
- - img_t = img_0
- - params = null vector
-small model:
- - conv
- - 1 transformer layer
- - deconv
-
-purpose: generate an identity "transformation"

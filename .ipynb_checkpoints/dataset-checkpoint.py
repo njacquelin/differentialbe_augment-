@@ -66,16 +66,16 @@ class AugDatasetWrapper(torch.utils.data.Dataset):
         if self.source == 'cifar10':
             p_mean = torch.tensor([[4.3122e+00, 4.3216e+00, 2.3369e+01, 2.3374e+01, 4.9998e-01, 8.0087e-01,
                                     1.2025e+00, 1.4007e+00, 1.5964e+00, 1.8004e+00, 9.9993e-01, 1.0002e+00,
-                                    9.9986e-01, 2.2321e-07, 1.9965e-01]])#.to(self.device)
+                                    9.9986e-01, 2.2321e-07, 1.9965e-01]])
             p_std = torch.tensor([[3.9740, 3.9851, 4.9544, 4.9539, 0.5000, 0.3993, 1.1651, 1.0210, 1.0200,
-                                   1.1669, 0.2066, 0.2068, 0.2066, 0.0517, 0.3997]])#.to(self.device)
+                                   1.1669, 0.2066, 0.2068, 0.2066, 0.0517, 0.3997]])
         elif self.source == 'imagenet':
             p_mean = torch.tensor([[6.8162e+01, 9.9199e+01, 2.6933e+02, 2.7457e+02, 4.9905e-01, 8.0054e-01,
                                     1.1998e+00, 1.3994e+00, 1.6014e+00, 1.7995e+00, 1.0001e+00, 1.0000e+00,
-                                    1.0005e+00, 1.5640e-04, 2.0018e-01, 5.0030e-01, 5.2507e-01]])#.to(self.device)
+                                    1.0005e+00, 1.5640e-04, 2.0018e-01, 5.0030e-01, 5.2507e-01]])
             p_std = torch.tensor([[7.7370e+01, 9.8681e+01, 1.3686e+02, 1.4349e+02, 5.0000e-01, 3.9959e-01,
                                    1.1661e+00, 1.0201e+00, 1.0201e+00, 1.1657e+00, 4.1347e-01, 4.1323e-01,
-                                   4.1349e-01, 1.0333e-01, 4.0013e-01, 5.0000e-01, 6.5251e-01]])#.to(self.device)
+                                   4.1349e-01, 1.0333e-01, 4.0013e-01, 5.0000e-01, 6.5251e-01]])
         return p_mean, p_std
 
     def __len__(self):
@@ -90,4 +90,6 @@ class AugDatasetWrapper(torch.utils.data.Dataset):
         params = torch.squeeze(params)
 
         return img_0, img_t, params
-    
+
+    def update_tau(self, tau):
+        self.transform.update_tau(tau)
