@@ -19,11 +19,11 @@ if __name__ == "__main__":
     batch_size = 512
     epochs_nb = 1000
     model_path = "models/best_model.pt"
-    lr = 1e-4
+    lr = 1e-3
     # load_model = True
     # warmup_epochs_nb = 0
     load_model = False
-    warmup_epochs_nb = 10
+    warmup_epochs_nb = 5
 
     hardware = "mono-gpu"
     # hardware = "cpu"
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     
     best_loss_value = 1000
 
-    train_loader.dataset.update_tau(0.)
-    eval_loader.dataset.update_tau(0.)
+    train_loader.dataset.update_tau(0.1)
+    eval_loader.dataset.update_tau(0.1)
 
     for epoch in range(1, epochs_nb+1):
         ### TRAIN ###
