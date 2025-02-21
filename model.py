@@ -63,7 +63,7 @@ class Image_Augmenter(nn.Module):
         decoder_layer = TransformerDecoderLayer(d_model = self.d_model,
                                                   nhead = self.n_head,
                                                   dim_feedforward = self.h_dim)
-        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=6)
+        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=self.n_layers)
 
         self.deconv_output = nn.Sequential(
             nn.ConvTranspose2d(self.d_model, 64, kernel_size=kernel, stride=kernel, padding=0, bias=False),
