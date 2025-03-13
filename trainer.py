@@ -17,31 +17,38 @@ if __name__ == "__main__":
     writer = SummaryWriter()
 
     batch_size = 512
-    epochs_nb = 1000
+    epochs_nb = 100
     model_path = "models/best_model.pt"
     lr = 1e-3
     # load_model = True
     # warmup_epochs_nb = 0
     load_model = False
-    warmup_epochs_nb = 5
+    warmup_epochs_nb = 10
 
-    hardware = "mono-gpu"
+    tau_init = 1.
+
+    # computer = "local_PC"
     # hardware = "cpu"
+    hardware = "mono-gpu"
     computer = "pagoda"
-    nb_workers = 20
+    # computer = "jeanzay"
+    # hardware = "multi-gpu"
+    nb_workers = 10
 
+    dataset = "cifar"
+    
     global_rank, local_rank, world_size, is_master, device = get_infos(hardware, computer)
     if hardware != 'cpu': torch.backends.cudnn.benchmark = True
-
-    model = Image_Augmenter(cifar=True)
+    
+    model = Image_Augmenter(cifar = (dataset == "cifar"))
     model = adapt_to_parallel_computing(hardware, model, local_rank)
     model.to(device)
     if load_model:
         model.load_weights(model_path)
         print("Model loaded")
     
-    train_dataset = get_dataset(device, "cifar", 'train')
-    eval_dataset = get_dataset(device, "cifar", 'eval')
+    train_dataset = get_dataset(device, dataset, 'train')
+    eval_dataset = get_dataset(device, dataset, 'eval')
     reverse_transform = get_reverse_transform(train_dataset.no_transform)
 
     train_sampler, eval_sampler, train_loader, eval_loader = get_data_stuff(hardware, train_dataset, eval_dataset,
@@ -66,8 +73,8 @@ if __name__ == "__main__":
     
     best_loss_value = 1000
 
-    train_loader.dataset.update_tau(0.1)
-    eval_loader.dataset.update_tau(0.1)
+    train_loader.dataset.update_tau(tau_init)
+    eval_loader.dataset.update_tau(tau_init)
 
     for epoch in range(1, epochs_nb+1):
         ### TRAIN ###

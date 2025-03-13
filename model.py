@@ -1,7 +1,7 @@
 import torch
 import torchvision
 from torch import nn
-from torch.nn import TransformerDecoder, TransformerDecoderLayer
+from torch.nn import TransformerDecoder, TransformerDecoderLayer, TransformerEncoder, TransformerEncoderLayer
 
 from math import log
 
@@ -12,7 +12,7 @@ class Image_Augmenter(nn.Module):
         self.n_head = 6
         self.n_layers = 1
         self.h_dim = 1024
-        self.d_model = 384 # must be divisible by n_head
+        self.d_model = self.n_head * 64 # = 384 must be divisible by n_head
         self.d_input_augment_vector = 15 if cifar else 17
 
         input_size = 32 if cifar else 224
@@ -20,9 +20,9 @@ class Image_Augmenter(nn.Module):
         self.map_size = input_size // kernel
         self.seq_size = self.map_size ** 2
         
-        self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len=self.seq_size)
+        self.positional_encoding = PositionalEncoding(d_model=self.d_model, dropout=0.1, max_len=1+self.seq_size)
 
-        self.transform_encoder = nn.Sequential(
+        self.augment_encoder = nn.Sequential(
             nn.Linear(self.d_input_augment_vector, self.h_dim, bias=False),
             nn.BatchNorm1d(self.h_dim),
             nn.ReLU(),
@@ -37,29 +37,22 @@ class Image_Augmenter(nn.Module):
         )
 
         self.conv_input = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, self.d_model, kernel_size=kernel, stride=kernel, padding=0, bias=False),
+            # nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),
+            # nn.BatchNorm2d(32),
+            # nn.ReLU(),
+            # nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
+            # nn.BatchNorm2d(64),
+            # nn.ReLU(),
+            nn.Conv2d(3, self.d_model, kernel_size=kernel, stride=kernel, padding=0, bias=False),
             nn.BatchNorm2d(self.d_model),
             nn.ReLU(),
         )
 
-        # ######## RESNET ########
-        # self.conv_input = torchvision.models.resnet18()
-        # end_conv = torch.nn.Conv2d(self.conv_input.fc.in_features, self.d_model, kernel_size=1, bias=False)
-        # self.conv_input.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-        # self.conv_input.maxpool = torch.nn.Identity()
-        # self.conv_input.layer4[0].conv1.stride = (1, 1)
-        # self.conv_input = torch.nn.Sequential(*(list(self.conv_input.children())[:-2]))#, end_conv)
-        # #########################
-        # print(self.conv_input)
-        # # self.map_size = 8
-        # # self.seq_size = self.map_size ** 2
-
+        encoder_layer = TransformerEncoderLayer(d_model = self.d_model,
+                                                nhead = self.n_head,
+                                                dim_feedforward = self.h_dim)
+        self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers=self.n_layers)
+        
         decoder_layer = TransformerDecoderLayer(d_model = self.d_model,
                                                   nhead = self.n_head,
                                                   dim_feedforward = self.h_dim)
@@ -67,6 +60,7 @@ class Image_Augmenter(nn.Module):
 
         self.deconv_output = nn.Sequential(
             nn.ConvTranspose2d(self.d_model, 64, kernel_size=kernel, stride=kernel, padding=0, bias=False),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1, bias=False),
@@ -82,26 +76,38 @@ class Image_Augmenter(nn.Module):
         x : (B, 3, 224, 224)
         params : (B, self.d_input_augment_vector)
 
+        imagenet :
         (17) elt params vector => (d_model) embedding vector
         (224 x 224) image => (14 x 14) feature map => (196) tokens sequence => (14 x 14) feature map => (224 x 224) image
+
+        cifar :
+        (15) elt params vector => (d_model) embedding vector
+        (32 x 32) image => (8 x 8) feature map => (94) tokens sequence => (8 x 8) feature map => (32 x 32) image
         """
-        batch_size = x.shape[0]
         
+        ### Image to Sequence ###
+        feature_map = self.conv_input(x) # (B, D, H, W)
+        B, _, H, W = feature_map.shape
+        img_sequence = feature_map.view(B, self.d_model, self.seq_size) # (B, D, S)
+        img_sequence = torch.permute(img_sequence, (2, 0, 1)) # (S, B, D)
+
         ### Prepare Keys ###
-        augmentation_embedding = self.transform_encoder(params).unsqueeze(0)
+        augmentation_embedding = self.augment_encoder(params).unsqueeze(0) # (1, B, D)
+        keys = torch.cat((augmentation_embedding, img_sequence), dim=0) # (S+1, B, D)
+        keys = self.positional_encoding(keys)
+        keys = self.transformer_encoder(keys)
 
         ### Prepare Queries ###
-        feature_map = self.conv_input(x) # (B, D, H, W)
-        img_sequence = feature_map.view(batch_size, self.d_model, self.seq_size) # (B, D, S)
-        img_sequence = torch.permute(img_sequence, (2, 0, 1)) # (S, B, D)
-        transfo_queries = self.positional_encoding(img_sequence) # (S, B, D)
-
+        # transfo_queries = torch.zeros_like(img_sequence)
+        # transfo_queries = self.positional_encoding(transfo_queries)
+        transfo_queries = keys[1:] # we remove the "augmentation_embedding" token
+        
         ### Transformer inference ###
-        seq_embedding = self.transformer_decoder(transfo_queries, augmentation_embedding) # Q:(S, B, D) @ K:(1, B, D) => (S, B, D)
+        seq_embedding = self.transformer_decoder(transfo_queries, keys) # Q: (S, B, D)  @  K/V: (S+1, B, D) => (S, B, D)
 
         ### Premare Upsample ###
-        out_feature_map = torch.permute(seq_embedding, (1, 2, 0)) # (B, D, S)
-        out_feature_map = out_feature_map.view(batch_size, self.d_model, self.map_size, self.map_size) # (B, D, H, W)
+        seq_embedding = torch.permute(seq_embedding, (1, 2, 0)) # (B, D, S)
+        out_feature_map = seq_embedding.view(B, self.d_model, H, W) # (B, D, H, W)
 
         ### Upsample => back to img shape ###
         x_hat = self.deconv_output(out_feature_map) # (B, 3, H, W)
@@ -133,5 +139,5 @@ class PositionalEncoding(nn.Module):
         """
             x : (S, B, D)
         """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
+        y = x + self.pe[:x.shape[0]]
+        return self.dropout(y)
